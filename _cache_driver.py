@@ -101,6 +101,11 @@ class Redis(_cache.driver.Abstract):
 
         return _pickle.loads(r)
 
+    def rm_hash_item(self, key: str, item_key: str):
+        """Remove a value from a hash
+        """
+        self._client.hdel(key, item_key)
+
     def l_push(self, key: str, value: _Any) -> int:
         """Push a value into beginning of a list
         """
