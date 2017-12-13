@@ -4,6 +4,11 @@
 ## Changelog
 
 
+### 1.2 (2017-12-13)
+
+Support for PytSite-7.0.
+
+
 ### 1.1 (2017-12-07)
 
 - Added configuration parameter `cache_redis.enabled`.

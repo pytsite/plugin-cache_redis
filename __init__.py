@@ -11,4 +11,4 @@ def plugin_load():
     from . import _cache_driver
 
     if reg.get('cache_redis.enabled', True):
-        cache.set_driver(_cache_driver.Redis)
+        cache.set_driver(_cache_driver.Redis())
