@@ -23,7 +23,8 @@ class Redis(_cache.driver.Abstract):
         self._port = _reg.get('redis.port', 6379)
         self._client = _StrictRedis(self._host, self._port)
 
-    def _fqkn(self, pool: str, key: str) -> str:
+    @staticmethod
+    def _fqkn(pool: str, key: str) -> str:
         """Get fully qualified key name
         """
         return _server_name + ':' + pool + ':' + key
@@ -88,16 +89,12 @@ class Redis(_cache.driver.Abstract):
 
         return r
 
-    def get_hash_item(self, pool: str, key: str, item_key: str) -> _Any:
+    def get_hash_item(self, pool: str, key: str, item_key: str, default=None) -> _Any:
         """Get a single value from a hash
         """
-        key = self._fqkn(pool, key)
+        r = self._client.hget(self._fqkn(pool, key), item_key)
 
-        r = self._client.hget(key, item_key)
-        if r is None:
-            raise _cache.error.HashKeyNotExists(pool, key, item_key)
-
-        return _pickle.loads(r)
+        return _pickle.loads(r) if r else default
 
     def rm_hash_item(self, pool: str, key: str, item_key: str):
         """Remove a value from a hash
@@ -135,7 +132,7 @@ class Redis(_cache.driver.Abstract):
         """
         try:
             self._client.rename(self._fqkn(pool, key), self._fqkn(pool, new_key))
-        
+
         except _redis_error.ResponseError as e:
             if str(e) == 'no such key':
                 raise _cache.error.KeyNotExist(pool, key)
