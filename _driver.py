@@ -1,13 +1,13 @@
 """PytSite Redis Cache Driver
 """
-import pickle as _pickle
-from typing import Any as _Any, Mapping as _Mapping, List as _List
-from redis import StrictRedis as _StrictRedis, exceptions as _redis_error
-from pytsite import cache as _cache, reg as _reg, router as _router
-
 __author__ = 'Alexander Shepetko'
 __email__ = 'a@shepetko.com'
 __license__ = 'MIT'
+
+import pickle as _pickle
+from typing import Any as _Any, Mapping as _Mapping, List as _List, Generator as _Generator, Optional as _Optional
+from redis import StrictRedis as _StrictRedis, exceptions as _redis_error
+from pytsite import cache as _cache, reg as _reg, router as _router
 
 _server_name = _router.server_name()
 
@@ -28,6 +28,13 @@ class Redis(_cache.driver.Abstract):
         """Get fully qualified key name
         """
         return _server_name + ':' + pool + ':' + key
+
+    def keys(self, pool: str) -> _Generator[str, None, None]:
+        """Get all keys of the pool
+        """
+        key_prefix = _server_name + ':' + pool + ':'
+        for k in self._client.keys(key_prefix + '*'):
+            yield k.decode('utf-8').replace(key_prefix, '')
 
     def has(self, pool: str, key: str) -> bool:
         """Check whether an item exists in the pool
@@ -115,7 +122,7 @@ class Redis(_cache.driver.Abstract):
 
         return _pickle.loads(v)
 
-    def ttl(self, pool: str, key: str) -> int:
+    def ttl(self, pool: str, key: str) -> _Optional[int]:
         """Get key's expiration time
         """
         key = self._fqkn(pool, key)
@@ -125,7 +132,7 @@ class Redis(_cache.driver.Abstract):
         if r == -2:
             raise _cache.error.KeyNotExist(pool, key)
 
-        return r
+        return r if r >= 0 else None
 
     def rnm(self, pool: str, key: str, new_key: str):
         """Rename a key

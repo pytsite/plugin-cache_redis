@@ -1,6 +1,6 @@
 {
   "name": "cache_redis",
-  "version": "1.3",
+  "version": "1.4",
   "description": {
     "en": "Redis Cache Driver",
     "ru": "Redis Cache Driver",
@@ -13,9 +13,9 @@
     "url": "https://shepetko.com"
   },
   "requires": {
+    "pytsite": ">=7.10",
     "packages": [
       "redis"
     ],
-    "plugins": []
   }
 }
