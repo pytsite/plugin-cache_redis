@@ -60,6 +60,10 @@ class Redis(_cache.driver.Abstract):
     def put_hash(self, pool: str, key: str, value: _Mapping, ttl: int = None) -> _Mapping:
         """Put a hash
         """
+        # Redis does not store empty hashes
+        if not value:
+            value = {'__pytsite_empty_hash_marker': True}
+
         key = self._fqkn(pool, key)
 
         self._client.hmset(key, {k: _pickle.dumps(v) for k, v in value.items()})
@@ -87,6 +91,9 @@ class Redis(_cache.driver.Abstract):
 
         r = {}
         for k in range(len(values)):
+            if k == '__pytsite_empty_hash_marker':
+                continue
+
             v = values[k]
 
             if v is None:

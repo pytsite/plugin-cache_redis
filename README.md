@@ -4,6 +4,11 @@
 ## Changelog
 
 
+### 1.4.2 (2018-03-18)
+
+Empty hashes store issue fixed.
+
+
 ### 1.4.1 (2018-02-13)
 
 `plugin.json` fixed.
