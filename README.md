@@ -4,6 +4,11 @@
 ## Changelog
 
 
+### 1.4.3 (2018-03-18)
+
+Empty hashes restore error fixed.
+
+
 ### 1.4.2 (2018-03-18)
 
 Empty hashes store issue fixed.

@@ -60,7 +60,7 @@ class Redis(_cache.driver.Abstract):
     def put_hash(self, pool: str, key: str, value: _Mapping, ttl: int = None) -> _Mapping:
         """Put a hash
         """
-        # Redis does not store empty hashes
+        # Redis does not store empty hashes, so we need to mark empty hashes from our side
         if not value:
             value = {'__pytsite_empty_hash_marker': True}
 
@@ -90,16 +90,17 @@ class Redis(_cache.driver.Abstract):
             hash_keys = self._client.hkeys(key)
 
         r = {}
-        for k in range(len(values)):
-            if k == '__pytsite_empty_hash_marker':
-                continue
-
-            v = values[k]
+        for i in range(len(values)):
+            v = values[i]
 
             if v is None:
-                raise _cache.error.HashKeyNotExists(pool, key, hash_keys[k])
+                raise _cache.error.HashKeyNotExists(pool, key, hash_keys[i])
 
-            r[hash_keys[k]] = _pickle.loads(v)
+            k = hash_keys[i].decode('utf-8')
+
+            # Redis does not store empty hashes, so we need to mark empty hashes from our side and then remove them
+            if k != '__pytsite_empty_hash_marker':
+                r[k] = _pickle.loads(v)
 
         return r
 
