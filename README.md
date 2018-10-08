@@ -4,6 +4,11 @@
 ## Changelog
 
 
+### 2.0 (2018-08-10)
+
+Support of `pytsite-8.x`.
+
+
 ### 1.4.3 (2018-03-18)
 
 Empty hashes restore error fixed.
