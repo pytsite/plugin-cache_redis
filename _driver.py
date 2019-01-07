@@ -5,11 +5,20 @@ __email__ = 'a@shepetko.com'
 __license__ = 'MIT'
 
 import pickle as _pickle
-from typing import Any as _Any, Mapping as _Mapping, List as _List, Generator as _Generator, Optional as _Optional
+from typing import Any as _Any, Mapping as _Mapping, List as _List, Generator as _Generator, Optional as _Optional, \
+    Type as _Type
 from redis import StrictRedis as _StrictRedis, exceptions as _redis_error
 from pytsite import cache as _cache, reg as _reg, router as _router
 
 _server_name = _router.server_name()
+
+_TYPES_MAP = {
+    'string': str,
+    'list': list,
+    'set': set,
+    'zset': set,
+    'hash': dict,
+}
 
 
 class Redis(_cache.driver.Abstract):
@@ -37,9 +46,17 @@ class Redis(_cache.driver.Abstract):
             yield k.decode('utf-8').replace(key_prefix, '')
 
     def has(self, pool: str, key: str) -> bool:
-        """Check whether an item exists in the pool
+        """Check whether the pool contains the key
         """
         return self._client.exists(self._fqkn(pool, key))
+
+    def type(self, pool: str, key: str) -> _Type:
+        """Get key's value type
+        """
+        try:
+            return _TYPES_MAP[self._client.type(self._fqkn(pool, key)).decode('utf-8')]
+        except KeyError:
+            raise _cache.error.KeyNotExist(pool, key)
 
     def put(self, pool: str, key: str, value: _Any, ttl: int = None) -> _Any:
         """Put an item into the pool
@@ -73,16 +90,25 @@ class Redis(_cache.driver.Abstract):
 
         return value
 
-    def put_hash_item(self, pool: str, key: str, item_key: str, value: _Any) -> _Any:
+    def put_hash_item(self, pool: str, key: str, item_key: str, value: _Any, ttl: int = None) -> _Any:
         """Put a value into a hash
         """
-        self._client.hset(self._fqkn(pool, key), item_key, _pickle.dumps(value))
+        key = self._fqkn(pool, key)
+
+        self._client.hset(key, item_key, _pickle.dumps(value))
+
+        if ttl:
+            self._client.expire(key, ttl)
 
         return value
 
     def get_hash(self, pool: str, key: str, hash_keys: _List[str] = None) -> _Mapping:
         """Get a hash
         """
+        # Redis treats non-existent keys as empty, but we don't
+        if not self.has(pool, key):
+            raise _cache.error.KeyNotExist(pool, key)
+
         key = self._fqkn(pool, key)
         values = self._client.hmget(key, hash_keys) if hash_keys else self._client.hvals(key)
 
@@ -107,6 +133,10 @@ class Redis(_cache.driver.Abstract):
     def get_hash_item(self, pool: str, key: str, item_key: str, default=None) -> _Any:
         """Get a single value from a hash
         """
+        # Redis treats non-existent keys as empty, but we don't
+        if not self.has(pool, key):
+            raise _cache.error.KeyNotExist(pool, key)
+
         r = self._client.hget(self._fqkn(pool, key), item_key)
 
         return _pickle.loads(r) if r else default
@@ -114,21 +144,84 @@ class Redis(_cache.driver.Abstract):
     def rm_hash_item(self, pool: str, key: str, item_key: str):
         """Remove a value from a hash
         """
-        self._client.hdel(key, item_key)
+        self._client.hdel(self._fqkn(pool, key), item_key)
 
-    def l_push(self, pool: str, key: str, value: _Any) -> int:
-        """Push a value into beginning of a list
+    def list_len(self, pool: str, key: str) -> int:
+        """Returns the length of the list stored at key
         """
-        return self._client.lpush(key, _pickle.dumps(value))
+        # Redis treats non-existent keys as empty, but we don't
+        if not self.has(pool, key):
+            raise _cache.error.KeyNotExist(pool, key)
 
-    def r_pop(self, pool: str, key: str) -> _Any:
-        """Pop an item from the end of a list
+        return self._client.llen(self._fqkn(pool, key))
+
+    def get_list(self, pool: str, key: str, start: int = 0, end: int = None) -> list:
+        """Return the specified elements of the list stored at key
         """
-        v = self._client.rpop(key)
+        # Redis treats non-existent keys as empty, but we don't
+        if not self.has(pool, key):
+            raise _cache.error.KeyNotExist(pool, key)
+
+        # Autodetect end of the list
+        # Redis includes last element into response, but this is not expected behaviour in Python world
+        end = self.list_len(pool, key) if end is None else end - 1
+
+        return [_pickle.loads(v) for v in self._client.lrange(self._fqkn(pool, key), start, end)]
+
+    def put_list(self, pool, key: str, value: list, ttl: int = None) -> list:
+        """Store a list
+        """
+        self.rm(pool, key)
+        for v in value:
+            self.list_r_push(pool, key, v)
+
+        if ttl is not None:
+            self.expire(pool, key, ttl)
+
+        return value
+
+    def list_l_push(self, pool: str, key: str, value: _Any, ttl: int = None) -> int:
+        """Insert the value at the head of the list stored at key
+        """
+        r = self._client.lpush(self._fqkn(pool, key), _pickle.dumps(value))
+
+        if ttl is not None:
+            self.expire(pool, key, ttl)
+
+        return value
+
+    def list_r_push(self, pool: str, key: str, value: _Any, ttl: int = None) -> int:
+        """Insert the value at the tail of the list stored at key
+        """
+        r = self._client.rpush(self._fqkn(pool, key), _pickle.dumps(value))
+
+        if ttl is not None:
+            self.expire(pool, key, ttl)
+
+        return r
+
+    def list_l_pop(self, pool: str, key: str) -> _Any:
+        """Remove and return the first element of the list stored at key
+        """
+        v = self._client.lpop(self._fqkn(pool, key))
         if not v:
             raise _cache.error.KeyNotExist(pool, key)
 
         return _pickle.loads(v)
+
+    def list_r_pop(self, pool: str, key: str) -> _Any:
+        """Remove and return the last element of the list stored at key
+        """
+        v = self._client.rpop(self._fqkn(pool, key))
+        if not v:
+            raise _cache.error.KeyNotExist(pool, key)
+
+        return _pickle.loads(v)
+
+    def expire(self, pool: str, key: str, ttl: int) -> int:
+        """Set a timeout on key
+        """
+        return self._client.expire(self._fqkn(pool, key), ttl)
 
     def ttl(self, pool: str, key: str) -> _Optional[int]:
         """Get key's expiration time
